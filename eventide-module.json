@@ -1,0 +1,608 @@
+{
+  "name": "pan-tilt-pointing",
+  "version": "1.0.0",
+  "description": "Pelco-D pan/tilt head pointing: yaw/pitch, lat/lon and arbitrary-endpoint target tracking, closed on a head-mounted compass with GPS (or manual) platform position.",
+  "author": "Eventide",
+  "dependencies": {
+    "pip": [
+      "aiohttp",
+      "pyserial"
+    ]
+  },
+  "arguments": [
+    {
+      "name": "serial_port",
+      "flag": "--serial-port",
+      "type": "str",
+      "default": "/dev/ttyUSB0",
+      "required": false,
+      "description": "USB-RS485 adapter the Pelco-D head is on."
+    },
+    {
+      "name": "address",
+      "flag": "--address",
+      "type": "int",
+      "default": 57,
+      "required": false,
+      "description": "Pelco-D address (head DIP switches 1-6)."
+    },
+    {
+      "name": "baud",
+      "flag": "--baud",
+      "type": "int",
+      "default": 9600,
+      "required": false,
+      "description": "Pelco-D baud rate (head DIP switches 7-8)."
+    },
+    {
+      "name": "compass_url",
+      "flag": "--compass-url",
+      "type": "str",
+      "default": "http://127.0.0.1:5000/proxy/tilt-compensated-compass/http/api/telemetry",
+      "required": false,
+      "description": "Head-mounted compass endpoint. Default: tilt-compensated-compass module via the eventide proxy."
+    },
+    {
+      "name": "gps_url",
+      "flag": "--gps-url",
+      "type": "str",
+      "default": "http://127.0.0.1:5000/proxy/tilt-compensated-compass/gps_http/api/telemetry",
+      "required": false,
+      "description": "GPS endpoint giving latitude/longitude/altitude_m/has_lock."
+    },
+    {
+      "name": "manual_position",
+      "flag": "--manual-position",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": "Optional 'lat,lon,alt' observer position that OVERRIDES GPS (stationary / no-GPS use). Also settable from the dashboard."
+    },
+    {
+      "name": "fallback",
+      "flag": "--fallback",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": "Optional 'lat,lon,alt' observer position used only until GPS has a fix."
+    },
+    {
+      "name": "declination",
+      "flag": "--declination",
+      "type": "float",
+      "default": 0.0,
+      "required": false,
+      "description": "Magnetic declination (deg, east positive) added to the compass bearing."
+    },
+    {
+      "name": "yaw_offset",
+      "flag": "--yaw-offset",
+      "type": "float",
+      "default": 0.0,
+      "required": false,
+      "description": "Compass mounting offset about the vertical axis (deg)."
+    },
+    {
+      "name": "pitch_offset",
+      "flag": "--pitch-offset",
+      "type": "float",
+      "default": 0.0,
+      "required": false,
+      "description": "Compass mounting offset in pitch (deg)."
+    },
+    {
+      "name": "pitch_sign",
+      "flag": "--pitch-sign",
+      "type": "int",
+      "default": 1,
+      "required": false,
+      "description": "1 or -1: flip if compass pitch is positive nose-down."
+    },
+    {
+      "name": "pan_center_heading",
+      "flag": "--pan-center-heading",
+      "type": "float",
+      "default": 0.0,
+      "required": false,
+      "description": "SET AT STARTUP: true bearing (deg) the head faces at mid-travel. The dead gap is centred directly behind this."
+    },
+    {
+      "name": "pan_range",
+      "flag": "--pan-range",
+      "type": "float",
+      "default": 350.0,
+      "required": false,
+      "description": "Total pan travel in degrees."
+    },
+    {
+      "name": "tilt_min",
+      "flag": "--tilt-min",
+      "type": "float",
+      "default": -35.0,
+      "required": false,
+      "description": "Compass pitch at the bottom tilt end stop."
+    },
+    {
+      "name": "tilt_max",
+      "flag": "--tilt-max",
+      "type": "float",
+      "default": 35.0,
+      "required": false,
+      "description": "Compass pitch at the top tilt end stop."
+    },
+    {
+      "name": "limit_margin",
+      "flag": "--limit-margin",
+      "type": "float",
+      "default": 3.0,
+      "required": false,
+      "description": "Stay this many degrees short of every end stop."
+    },
+    {
+      "name": "pan_rate",
+      "flag": "--pan-rate",
+      "type": "float",
+      "default": 14.0,
+      "required": false,
+      "description": "Nominal pan speed (deg/s) used for predictive stopping."
+    },
+    {
+      "name": "tilt_rate",
+      "flag": "--tilt-rate",
+      "type": "float",
+      "default": 2.0,
+      "required": false,
+      "description": "Nominal tilt speed (deg/s) used for predictive stopping."
+    },
+    {
+      "name": "latency",
+      "flag": "--latency",
+      "type": "float",
+      "default": 0.25,
+      "required": false,
+      "description": "Sensor + serial latency (s) used for predictive stopping."
+    },
+    {
+      "name": "smooth",
+      "flag": "--smooth",
+      "type": "float",
+      "default": 0.1,
+      "required": false,
+      "description": "GPS position smoothing factor 0-1."
+    },
+    {
+      "name": "lead_time",
+      "flag": "--lead-time",
+      "type": "float",
+      "default": 1.0,
+      "required": false,
+      "description": "Seconds to look ahead of a tracked target."
+    },
+    {
+      "name": "period",
+      "flag": "--period",
+      "type": "float",
+      "default": 0.1,
+      "required": false,
+      "description": "Control loop period (s)."
+    }
+  ],
+  "sockets": [
+    {
+      "name": "http",
+      "type": "tcp",
+      "description": "HTTP API for pointing control and telemetry."
+    }
+  ],
+  "programs": [
+    {
+      "name": "pantilt_service",
+      "command": "{venv_python} {module_dir}/pantilt_service.py --http-port {socket:http} --serial-port {arg:serial_port} --address {arg:address} --baud {arg:baud} --compass-url {arg:compass_url} --gps-url {arg:gps_url} --manual-position \"{arg:manual_position}\" --fallback \"{arg:fallback}\" --declination {arg:declination} --yaw-offset {arg:yaw_offset} --pitch-offset {arg:pitch_offset} --pitch-sign {arg:pitch_sign} --pan-center-heading {arg:pan_center_heading} --pan-range {arg:pan_range} --tilt-min {arg:tilt_min} --tilt-max {arg:tilt_max} --limit-margin {arg:limit_margin} --pan-rate {arg:pan_rate} --tilt-rate {arg:tilt_rate} --latency {arg:latency} --smooth {arg:smooth} --lead-time {arg:lead_time} --period {arg:period}",
+      "directory": "{module_dir}",
+      "autostart": true,
+      "autorestart": true,
+      "startretries": 10000,
+      "priority": 20,
+      "user": "root"
+    }
+  ],
+  "ui": [
+    {
+      "id": "map",
+      "type": "map",
+      "title": "PAN/TILT MAP",
+      "region": "center",
+      "default": true,
+      "track": {
+        "socket": "http",
+        "get": "/api/track",
+        "interval": 1000,
+        "lat": "lat",
+        "lon": "lon",
+        "heading": "heading",
+        "gimbal": "gimbal",
+        "frame": "frame"
+      }
+    },
+    {
+      "id": "status",
+      "type": "telemetry",
+      "title": "PAN/TILT STATUS",
+      "region": "sidebar",
+      "default": true,
+      "socket": "http",
+      "get": "/api/telemetry",
+      "interval": 500,
+      "rows": [
+        {
+          "label": "MODE",
+          "path": "mode"
+        },
+        {
+          "label": "STATUS",
+          "path": "status"
+        },
+        {
+          "label": "FAULT",
+          "path": "fault"
+        },
+        {
+          "label": "HEAD YAW",
+          "path": "head_yaw",
+          "fmt": "f1"
+        },
+        {
+          "label": "HEAD PITCH",
+          "path": "head_pitch",
+          "fmt": "f1"
+        },
+        {
+          "label": "AIM YAW",
+          "path": "aim_yaw",
+          "fmt": "f1"
+        },
+        {
+          "label": "AIM PITCH",
+          "path": "aim_pitch",
+          "fmt": "f1"
+        },
+        {
+          "label": "PAN ERR",
+          "path": "err_pan",
+          "fmt": "f1"
+        },
+        {
+          "label": "TILT ERR",
+          "path": "err_tilt",
+          "fmt": "f1"
+        },
+        {
+          "label": "RANGE",
+          "path": "range_m",
+          "fmt": "m_km"
+        },
+        {
+          "label": "OBSERVER",
+          "path": "observer_source"
+        },
+        {
+          "label": "HEAD LINK",
+          "path": "head_connected"
+        },
+        {
+          "label": "COMPASS",
+          "path": "sources.compass.ok"
+        },
+        {
+          "label": "GPS",
+          "path": "sources.gps.ok"
+        },
+        {
+          "label": "LIMITS SET",
+          "path": "limits_set"
+        }
+      ]
+    },
+    {
+      "id": "angle",
+      "type": "form",
+      "title": "POINT YAW / PITCH",
+      "region": "sidebar",
+      "default": true,
+      "socket": "http",
+      "get": "/api/mode/angle",
+      "put": "/api/mode/angle",
+      "submit_label": "⊕ POINT",
+      "fields": [
+        {
+          "key": "yaw",
+          "label": "Yaw (true bearing °)",
+          "kind": "number",
+          "step": "0.5",
+          "min": 0,
+          "max": 360
+        },
+        {
+          "key": "pitch",
+          "label": "Pitch (elevation °)",
+          "kind": "number",
+          "step": "0.5",
+          "min": -90,
+          "max": 90
+        },
+        {
+          "key": "frame",
+          "label": "Frame",
+          "kind": "select",
+          "options": [
+            "earth",
+            "body"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "latlon",
+      "type": "form",
+      "title": "POINT LAT / LON",
+      "region": "sidebar",
+      "default": true,
+      "socket": "http",
+      "get": "/api/mode/latlon",
+      "put": "/api/mode/latlon",
+      "submit_label": "⊕ POINT",
+      "fields": [
+        {
+          "key": "lat",
+          "label": "Latitude",
+          "kind": "number",
+          "step": "0.000001"
+        },
+        {
+          "key": "lon",
+          "label": "Longitude",
+          "kind": "number",
+          "step": "0.000001"
+        },
+        {
+          "key": "alt",
+          "label": "Altitude (m)",
+          "kind": "number",
+          "step": "0.1"
+        }
+      ]
+    },
+    {
+      "id": "track",
+      "type": "form",
+      "title": "ENDPOINT TRACK",
+      "region": "sidebar",
+      "default": true,
+      "socket": "http",
+      "get": "/api/mode/track",
+      "put": "/api/mode/track",
+      "submit_label": "⌖ FOLLOW URL",
+      "fields": [
+        {
+          "key": "url",
+          "label": "URL",
+          "kind": "text"
+        },
+        {
+          "key": "label",
+          "label": "Label",
+          "kind": "text"
+        },
+        {
+          "key": "interval",
+          "label": "Poll (s)",
+          "kind": "number",
+          "step": "0.1",
+          "min": 0.1
+        },
+        {
+          "key": "lat_key",
+          "label": "Lat key",
+          "kind": "text"
+        },
+        {
+          "key": "lon_key",
+          "label": "Lon key",
+          "kind": "text"
+        },
+        {
+          "key": "alt_key",
+          "label": "Alt key (m)",
+          "kind": "text"
+        }
+      ]
+    },
+    {
+      "id": "manual-position",
+      "type": "form",
+      "title": "MANUAL POSITION",
+      "region": "sidebar",
+      "default": true,
+      "socket": "http",
+      "get": "/api/observer",
+      "put": "/api/observer",
+      "submit_label": "APPLY POSITION",
+      "fields": [
+        {
+          "key": "enabled",
+          "label": "Override GPS",
+          "kind": "toggle"
+        },
+        {
+          "key": "lat",
+          "label": "Latitude",
+          "kind": "number",
+          "step": "0.000001"
+        },
+        {
+          "key": "lon",
+          "label": "Longitude",
+          "kind": "number",
+          "step": "0.000001"
+        },
+        {
+          "key": "alt",
+          "label": "Altitude (m)",
+          "kind": "number",
+          "step": "0.1"
+        }
+      ]
+    },
+    {
+      "id": "track-status",
+      "type": "telemetry",
+      "title": "TRACK STATUS",
+      "region": "sidebar",
+      "default": false,
+      "socket": "http",
+      "get": "/api/mode/track",
+      "interval": 1000,
+      "rows": [
+        {
+          "label": "ACTIVE",
+          "path": "active"
+        },
+        {
+          "label": "OK",
+          "path": "ok"
+        },
+        {
+          "label": "ERROR",
+          "path": "error"
+        },
+        {
+          "label": "LAT",
+          "path": "lat",
+          "fmt": "f6"
+        },
+        {
+          "label": "LON",
+          "path": "lon",
+          "fmt": "f6"
+        },
+        {
+          "label": "ALT",
+          "path": "alt_m",
+          "fmt": "f1"
+        }
+      ]
+    },
+    {
+      "id": "rc",
+      "type": "joystick",
+      "title": "PAN/TILT CONTROL",
+      "region": "center",
+      "default": false,
+      "socket": "http",
+      "put": "/api/mode/angle",
+      "telemetry_get": "/api/telemetry",
+      "paths": {
+        "x": "head_yaw",
+        "y": "head_pitch"
+      },
+      "fields": {
+        "x": "yaw",
+        "y": "pitch",
+        "frame": "frame"
+      }
+    },
+    {
+      "id": "nudge",
+      "type": "form",
+      "title": "AIM NUDGE",
+      "region": "sidebar",
+      "default": false,
+      "socket": "http",
+      "fields": [
+        {
+          "key": "yaw_offset_deg",
+          "label": "Yaw nudge (°)",
+          "kind": "nudge",
+          "step": "1",
+          "get": "/api/offset/yaw",
+          "put": "/api/offset/yaw",
+          "min": -180,
+          "max": 180
+        },
+        {
+          "key": "pitch_offset_deg",
+          "label": "Pitch nudge (°)",
+          "kind": "nudge",
+          "step": "1",
+          "get": "/api/offset/pitch",
+          "put": "/api/offset/pitch",
+          "min": -90,
+          "max": 90
+        },
+        {
+          "key": "lead_time_s",
+          "label": "Lead time (s)",
+          "kind": "nudge",
+          "step": "0.1",
+          "get": "/api/offset/lead_time",
+          "put": "/api/offset/lead_time",
+          "min": 0,
+          "max": 20
+        },
+        {
+          "key": "alt_offset_m",
+          "label": "Alt offset (m)",
+          "kind": "nudge",
+          "step": "10",
+          "get": "/api/offset/alt",
+          "put": "/api/offset/alt"
+        }
+      ]
+    },
+    {
+      "id": "limits",
+      "type": "form",
+      "title": "TRAVEL LIMITS",
+      "region": "sidebar",
+      "default": false,
+      "socket": "http",
+      "get": "/api/limits",
+      "put": "/api/limits",
+      "submit_label": "APPLY LIMITS",
+      "fields": [
+        {
+          "key": "pan_center_heading",
+          "label": "Mid-travel bearing (°)",
+          "kind": "number",
+          "step": "0.5",
+          "min": 0,
+          "max": 360
+        },
+        {
+          "key": "pan_range_deg",
+          "label": "Pan range (°)",
+          "kind": "number",
+          "step": "1"
+        },
+        {
+          "key": "tilt_min_deg",
+          "label": "Tilt min (°)",
+          "kind": "number",
+          "step": "1"
+        },
+        {
+          "key": "tilt_max_deg",
+          "label": "Tilt max (°)",
+          "kind": "number",
+          "step": "1"
+        },
+        {
+          "key": "limit_margin_deg",
+          "label": "Margin (°)",
+          "kind": "number",
+          "step": "0.5"
+        }
+      ]
+    }
+  ]
+}
