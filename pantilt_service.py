@@ -182,6 +182,15 @@ class PanTiltService:
                 st.update(ok=False, error=str(exc) or type(exc).__name__)
             await asyncio.sleep(cfg["interval"])
 
+    def begin_track(self, cfg: Dict[str, Any]) -> None:
+        """Switch to track mode and start polling `cfg` (retries forever if the
+        endpoint is unreachable, so the target can come online later)."""
+        self.stop_track_task()
+        self.track_cfg = cfg
+        self.track_state.update(active=True, ok=False, error=None)
+        self.pointer.follow_track(cfg["label"] or cfg["url"])
+        self._track_task = asyncio.create_task(self._poll_track(self._session, cfg))
+
     def stop_track_task(self) -> None:
         if self._track_task:
             self._track_task.cancel()
@@ -360,11 +369,7 @@ def build_app(svc: PanTiltService) -> web.Application:
                     return bad(f"'{k}' must be a string")
                 if d[k].strip():
                     cfg[k] = d[k].strip()
-        svc.stop_track_task()
-        svc.track_cfg = cfg
-        svc.track_state.update(active=True, ok=False, error=None)
-        p.follow_track(cfg["label"] or url)
-        svc._track_task = asyncio.create_task(svc._poll_track(svc._session, cfg))
+        svc.begin_track(cfg)
         return web.json_response({"status": "ok", "mode": "track", "url": url})
 
     @r.delete("/api/mode/track")
@@ -458,6 +463,44 @@ def build_app(svc: PanTiltService) -> web.Application:
 
 
 # ---------------------------------------------------------------------------- main
+# Endpoint presets for --track-host: URL path on the other payload + JSON keys.
+TRACK_PRESETS = {
+    # another payload running tripwire-gimbal-point (platform position from MAVLink)
+    "tripwire": {"path": "/proxy/tripwire-gimbal-point/api/telemetry",
+                 "lat_key": "lat", "lon_key": "lon", "alt_key": "alt"},
+    # another payload running the tilt-compensated-compass GPS service
+    "gps": {"path": "/proxy/tilt-compensated-compass/gps_http/api/telemetry",
+            "lat_key": "latitude", "lon_key": "longitude", "alt_key": "altitude_m"},
+}
+
+
+def default_track_config(a: argparse.Namespace) -> Optional[Dict[str, Any]]:
+    """Track config built from startup args, or None when no default target is set.
+
+    --track-url (full URL) wins; otherwise --track-host (IP / hostname, optional
+    :port) is expanded with the --track-preset endpoint. Key args left blank
+    take the preset's keys (or lat/lon/alt for a bare --track-url).
+    """
+    host, url = (a.track_host or "").strip(), (a.track_url or "").strip()
+    if not host and not url:
+        return None
+    preset = TRACK_PRESETS[a.track_preset]
+    if url:
+        if not url.startswith(("http://", "https://")):
+            raise SystemExit("--track-url must start with http:// or https://")
+        keys = {"lat_key": "lat", "lon_key": "lon", "alt_key": "alt"}
+    else:
+        host = host.removeprefix("http://").removeprefix("https://").rstrip("/")
+        url = f"http://{host}{preset['path']}"
+        keys = {k: preset[k] for k in ("lat_key", "lon_key", "alt_key")}
+    cfg = {"url": url, "interval": a.track_interval,
+           "label": (a.track_label or host or url).strip(),
+           "speed_key": "", "track_key": "", "vrate_key": ""}
+    for k in ("lat_key", "lon_key", "alt_key"):
+        cfg[k] = (getattr(a, "track_" + k) or "").strip() or keys[k]
+    return cfg
+
+
 def parse_fallback(s: str):
     s = (s or "").strip()
     if not s:
@@ -486,6 +529,17 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--compass-interval", type=float, default=0.1)
     ap.add_argument("--gps-interval", type=float, default=1.0)
     ap.add_argument("--http-timeout", type=float, default=3.0)
+    ap.add_argument("--track-host", default="",
+                    help="IP/hostname of another eventide payload to track automatically at startup")
+    ap.add_argument("--track-preset", default="tripwire", choices=sorted(TRACK_PRESETS),
+                    help="what the --track-host payload runs: tripwire-gimbal-point or the TCC GPS")
+    ap.add_argument("--track-url", default="",
+                    help="full endpoint URL to track at startup (overrides --track-host)")
+    ap.add_argument("--track-label", default="")
+    ap.add_argument("--track-interval", type=float, default=1.0)
+    ap.add_argument("--track-lat-key", default="", help="blank = preset default")
+    ap.add_argument("--track-lon-key", default="")
+    ap.add_argument("--track-alt-key", default="")
     ap.add_argument("--fallback", default="", help="lat,lon,alt used until GPS has a fix")
     ap.add_argument("--manual-position", default="",
                     help="lat,lon,alt observer position that OVERRIDES GPS (no-GPS / stationary use)")
@@ -545,6 +599,10 @@ async def main() -> None:
     if head is None:
         svc.head_error = f"cannot open {a.serial_port}"
     await svc.start()
+    track = default_track_config(a)
+    if track is not None:
+        svc.begin_track(track)
+        print(f"[pantilt] auto-tracking {track['url']} ({track['label']})", flush=True)
 
     runner = web.AppRunner(build_app(svc))
     await runner.setup()

@@ -51,6 +51,70 @@
       "description": "GPS endpoint giving latitude/longitude/altitude_m/has_lock."
     },
     {
+      "name": "track_host",
+      "flag": "--track-host",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": "IP/hostname of another eventide payload to track automatically at startup (blank = don't). Retries until it comes online."
+    },
+    {
+      "name": "track_preset",
+      "flag": "--track-preset",
+      "type": "str",
+      "default": "tripwire",
+      "required": false,
+      "description": "What the track_host payload runs: 'tripwire' (tripwire-gimbal-point) or 'gps' (tilt-compensated-compass GPS)."
+    },
+    {
+      "name": "track_url",
+      "flag": "--track-url",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": "Full endpoint URL to track at startup; overrides track_host."
+    },
+    {
+      "name": "track_label",
+      "flag": "--track-label",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": "Display name for the default target."
+    },
+    {
+      "name": "track_interval",
+      "flag": "--track-interval",
+      "type": "float",
+      "default": 1.0,
+      "required": false,
+      "description": "Poll period (s) for the default target."
+    },
+    {
+      "name": "track_lat_key",
+      "flag": "--track-lat-key",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": "Latitude JSON key (blank = preset default)."
+    },
+    {
+      "name": "track_lon_key",
+      "flag": "--track-lon-key",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": "Longitude JSON key (blank = preset default)."
+    },
+    {
+      "name": "track_alt_key",
+      "flag": "--track-alt-key",
+      "type": "str",
+      "default": "",
+      "required": false,
+      "description": "Altitude (m) JSON key (blank = preset default)."
+    },
+    {
       "name": "manual_position",
       "flag": "--manual-position",
       "type": "str",
@@ -197,7 +261,7 @@
   "programs": [
     {
       "name": "pantilt_service",
-      "command": "{venv_python} {module_dir}/pantilt_service.py --http-port {socket:http} --serial-port {arg:serial_port} --address {arg:address} --baud {arg:baud} --compass-url {arg:compass_url} --gps-url {arg:gps_url} --manual-position \"{arg:manual_position}\" --fallback \"{arg:fallback}\" --declination {arg:declination} --yaw-offset {arg:yaw_offset} --pitch-offset {arg:pitch_offset} --pitch-sign {arg:pitch_sign} --pan-center-heading {arg:pan_center_heading} --pan-range {arg:pan_range} --tilt-min {arg:tilt_min} --tilt-max {arg:tilt_max} --limit-margin {arg:limit_margin} --pan-rate {arg:pan_rate} --tilt-rate {arg:tilt_rate} --latency {arg:latency} --smooth {arg:smooth} --lead-time {arg:lead_time} --period {arg:period}",
+      "command": "{venv_python} {module_dir}/pantilt_service.py --http-port {socket:http} --serial-port {arg:serial_port} --address {arg:address} --baud {arg:baud} --compass-url {arg:compass_url} --gps-url {arg:gps_url} --track-host \"{arg:track_host}\" --track-preset {arg:track_preset} --track-url \"{arg:track_url}\" --track-label \"{arg:track_label}\" --track-interval {arg:track_interval} --track-lat-key \"{arg:track_lat_key}\" --track-lon-key \"{arg:track_lon_key}\" --track-alt-key \"{arg:track_alt_key}\" --manual-position \"{arg:manual_position}\" --fallback \"{arg:fallback}\" --declination {arg:declination} --yaw-offset {arg:yaw_offset} --pitch-offset {arg:pitch_offset} --pitch-sign {arg:pitch_sign} --pan-center-heading {arg:pan_center_heading} --pan-range {arg:pan_range} --tilt-min {arg:tilt_min} --tilt-max {arg:tilt_max} --limit-margin {arg:limit_margin} --pan-rate {arg:pan_rate} --tilt-rate {arg:tilt_rate} --latency {arg:latency} --smooth {arg:smooth} --lead-time {arg:lead_time} --period {arg:period}",
       "directory": "{module_dir}",
       "autostart": true,
       "autorestart": true,

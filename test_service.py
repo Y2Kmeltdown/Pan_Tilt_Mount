@@ -93,6 +93,31 @@ class Service(unittest.IsolatedAsyncioTestCase):
         t = await (await self.http.get("/api/telemetry")).json()
         self.assertEqual(t["observer_source"], "gps")
 
+    async def test_default_track_from_args_autostarts(self):
+        a = ps.parse_args(["--http-port", "0", "--track-url", self.u + "/tgt",
+                           "--track-lat-key", "position.lat", "--track-lon-key", "position.lon",
+                           "--track-alt-key", "alt", "--track-interval", "0.1"])
+        cfg = ps.default_track_config(a)
+        self.svc.begin_track(cfg)                      # what main() does at startup
+        await asyncio.sleep(0.6)
+        t = await (await self.http.get("/api/telemetry")).json()
+        self.assertEqual(t["mode"], "track")
+        self.assertAlmostEqual(t["aim_yaw"], 90.0, delta=0.5)
+
+    def test_default_track_config_presets(self):
+        P = ps.parse_args
+        self.assertIsNone(ps.default_track_config(P(["--http-port", "0"])))
+        c = ps.default_track_config(P(["--http-port", "0", "--track-host", "192.168.30.5"]))
+        self.assertEqual(c["url"], "http://192.168.30.5/proxy/tripwire-gimbal-point/api/telemetry")
+        self.assertEqual((c["lat_key"], c["lon_key"], c["alt_key"]), ("lat", "lon", "alt"))
+        c = ps.default_track_config(P(["--http-port", "0", "--track-host", "http://10.0.0.2:5000/",
+                                       "--track-preset", "gps", "--track-alt-key", "alt"]))
+        self.assertEqual(c["url"], "http://10.0.0.2:5000/proxy/tilt-compensated-compass/gps_http/api/telemetry")
+        self.assertEqual((c["lat_key"], c["alt_key"]), ("latitude", "alt"))     # override wins
+        c = ps.default_track_config(P(["--http-port", "0", "--track-url", "http://x/y",
+                                       "--track-host", "ignored"]))
+        self.assertEqual(c["url"], "http://x/y")                                 # url overrides host
+
     async def test_bad_requests_and_limits(self):
         self.assertEqual((await self.http.put("/api/mode/latlon", json={"lat": "x"})).status, 400)
         self.assertEqual((await self.http.put("/api/mode/track", json={"url": "ftp://x"})).status, 400)

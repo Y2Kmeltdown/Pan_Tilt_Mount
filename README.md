@@ -177,6 +177,21 @@ compass; it only *reads* the compass module's HTTP endpoints (through the eventi
 
 Observer priority: manual override > live GPS > last good GPS (held) > `--fallback`.
 
+### Default target (auto-track at startup)
+Set `track_host` to the IP of another Eventide payload and the module enters track mode on that payload as soon
+as it starts, retrying every `track_interval` seconds until the target answers (nothing moves until a position
+arrives and the compass is live). `track_preset` says what the other payload runs:
+
+| `track_preset` | Endpoint used | Keys |
+|---|---|---|
+| `tripwire` (default) | `http://<host>/proxy/tripwire-gimbal-point/api/telemetry` | `lat`, `lon`, `alt` |
+| `gps` | `http://<host>/proxy/tilt-compensated-compass/gps_http/api/telemetry` | `latitude`, `longitude`, `altitude_m` |
+
+`track_host` may include a port (`10.0.0.2:5000`). `track_url` supplies a full URL instead (overrides the host),
+and `track_lat_key` / `track_lon_key` / `track_alt_key` override the keys (blank = preset). The ENDPOINT TRACK widget
+can still replace the target at any time; a restart returns to the default. **Note:** with a default target set the
+module no longer starts idle - it begins pointing once the target and compass are available.
+
 ### Pointing modes (`/api/...`)
 | Mode | Request | Behaviour |
 |---|---|---|
