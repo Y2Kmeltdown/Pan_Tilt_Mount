@@ -235,7 +235,7 @@ API: `PUT /api/calibrate {"axes", "apply", "center"}`, `GET /api/calibrate`. Res
 supervisor (`[pantilt] calibration done: ...`) - copy them into the module arguments to keep them across a restart.
 
 It aborts with an explanation, rather than leaving the head running, when the compass goes stale, a phase times
-out, the pan turns more than a full circle (no limit switch), the head does not move at all (power / wiring /
+out (`cal_pan_timeout` 90 s / `cal_tilt_timeout` 120 s per sweep - raise them for a slow head), the pan turns more than a full circle (no limit switch), the head does not move at all (power / wiring /
 compass not updating), or the compass moves against the commanded direction - for tilt it tells you to set
 `pitch_sign` to -1. The head moves at its full speed to both extremes (~1-2 minutes for tilt), so clear the area
 and make sure cables have slack. Needs a connected head and a live compass.

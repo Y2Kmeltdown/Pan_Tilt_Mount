@@ -227,6 +227,22 @@
       "description": "Sensor + serial latency (s) used for predictive stopping."
     },
     {
+      "name": "cal_pan_timeout",
+      "flag": "--cal-pan-timeout",
+      "type": "float",
+      "default": 90.0,
+      "required": false,
+      "description": "Calibration: max seconds for one pan sweep to reach an end stop (raise it if your head pans slowly)."
+    },
+    {
+      "name": "cal_tilt_timeout",
+      "flag": "--cal-tilt-timeout",
+      "type": "float",
+      "default": 120.0,
+      "required": false,
+      "description": "Calibration: max seconds for one tilt sweep to reach an end stop."
+    },
+    {
       "name": "smooth",
       "flag": "--smooth",
       "type": "float",
@@ -261,7 +277,7 @@
   "programs": [
     {
       "name": "pantilt_service",
-      "command": "{venv_python} {module_dir}/pantilt_service.py --http-port {socket:http} --serial-port {arg:serial_port} --address {arg:address} --baud {arg:baud} --compass-url {arg:compass_url} --gps-url {arg:gps_url} --track-host \"{arg:track_host}\" --track-preset {arg:track_preset} --track-url \"{arg:track_url}\" --track-label \"{arg:track_label}\" --track-interval {arg:track_interval} --track-lat-key \"{arg:track_lat_key}\" --track-lon-key \"{arg:track_lon_key}\" --track-alt-key \"{arg:track_alt_key}\" --manual-position \"{arg:manual_position}\" --fallback \"{arg:fallback}\" --declination {arg:declination} --yaw-offset {arg:yaw_offset} --pitch-offset {arg:pitch_offset} --pitch-sign {arg:pitch_sign} --pan-center-heading {arg:pan_center_heading} --pan-range {arg:pan_range} --tilt-min {arg:tilt_min} --tilt-max {arg:tilt_max} --limit-margin {arg:limit_margin} --pan-rate {arg:pan_rate} --tilt-rate {arg:tilt_rate} --latency {arg:latency} --smooth {arg:smooth} --lead-time {arg:lead_time} --period {arg:period}",
+      "command": "{venv_python} {module_dir}/pantilt_service.py --http-port {socket:http} --serial-port {arg:serial_port} --address {arg:address} --baud {arg:baud} --compass-url {arg:compass_url} --gps-url {arg:gps_url} --track-host \"{arg:track_host}\" --track-preset {arg:track_preset} --track-url \"{arg:track_url}\" --track-label \"{arg:track_label}\" --track-interval {arg:track_interval} --track-lat-key \"{arg:track_lat_key}\" --track-lon-key \"{arg:track_lon_key}\" --track-alt-key \"{arg:track_alt_key}\" --manual-position \"{arg:manual_position}\" --fallback \"{arg:fallback}\" --declination {arg:declination} --yaw-offset {arg:yaw_offset} --pitch-offset {arg:pitch_offset} --pitch-sign {arg:pitch_sign} --pan-center-heading {arg:pan_center_heading} --pan-range {arg:pan_range} --tilt-min {arg:tilt_min} --tilt-max {arg:tilt_max} --limit-margin {arg:limit_margin} --pan-rate {arg:pan_rate} --tilt-rate {arg:tilt_rate} --latency {arg:latency} --cal-pan-timeout {arg:cal_pan_timeout} --cal-tilt-timeout {arg:cal_tilt_timeout} --smooth {arg:smooth} --lead-time {arg:lead_time} --period {arg:period}",
       "directory": "{module_dir}",
       "autostart": true,
       "autorestart": true,

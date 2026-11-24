@@ -598,6 +598,10 @@ def parse_args(argv=None) -> argparse.Namespace:
     ap.add_argument("--pan-rate", type=float, default=14.0)
     ap.add_argument("--tilt-rate", type=float, default=2.0)
     ap.add_argument("--latency", type=float, default=0.25)
+    ap.add_argument("--cal-pan-timeout", type=float, default=90.0,
+                    help="calibration: max seconds for one pan sweep to reach an end stop")
+    ap.add_argument("--cal-tilt-timeout", type=float, default=120.0,
+                    help="calibration: max seconds for one tilt sweep to reach an end stop")
     ap.add_argument("--smooth", type=float, default=0.1)
     ap.add_argument("--lead-time", type=float, default=1.0)
     return ap.parse_args(argv)
@@ -610,7 +614,8 @@ def make_pointer(a: argparse.Namespace) -> Pointer:
         pan_center_heading=None if a.pan_center_heading is None else wrap360(a.pan_center_heading),
         pan_range_deg=a.pan_range, tilt_min_deg=a.tilt_min, tilt_max_deg=a.tilt_max,
         limit_margin_deg=a.limit_margin, pan_rate_dps=a.pan_rate, tilt_rate_dps=a.tilt_rate,
-        latency_s=a.latency, smooth=a.smooth, lead_time_s=a.lead_time,
+        latency_s=a.latency,
+        cal_pan_timeout_s=a.cal_pan_timeout, cal_tilt_timeout_s=a.cal_tilt_timeout, smooth=a.smooth, lead_time_s=a.lead_time,
         fallback=parse_fallback(a.fallback)))
     manual = parse_fallback(a.manual_position)
     if manual is not None:

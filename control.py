@@ -129,6 +129,8 @@ class PointerConfig:
     cal_stall_s: float = 2.0           # compass still this long => end stop reached
     cal_eps_deg: float = 0.6           # movement smaller than this counts as still
     cal_settle_s: float = 0.6          # pause between phases
+    cal_pan_timeout_s: float = 90.0    # max time for ONE pan sweep to reach an end stop
+    cal_tilt_timeout_s: float = 120.0  # max time for ONE tilt sweep to reach an end stop
     # loop tuning
     pan_rate_dps: float = 14.0
     tilt_rate_dps: float = 2.0

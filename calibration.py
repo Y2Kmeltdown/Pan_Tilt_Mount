@@ -83,13 +83,14 @@ class Calibrator:
         if abs(self._diff(axis, pos, self._ref)) > cfg.cal_eps_deg:
             self._ref, self._last_change = pos, now
 
-        rate = cfg.pan_rate_dps if axis == "pan" else cfg.tilt_rate_dps
-        full = 360.0 if axis == "pan" else 90.0
-        if axis == "pan" and abs(self.travel) > full + 5.0:
+        if axis == "pan" and abs(self.travel) > 365.0:
             return self._fail("no end stop found: pan travelled more than a full turn",
                               "are the head's limit switches working?")
-        if now - self._t0 > 1.6 * full / rate + cfg.cal_stall_s:
-            return self._fail(f"{axis} {kind}: timed out before the head stalled")
+        limit = cfg.cal_pan_timeout_s if axis == "pan" else cfg.cal_tilt_timeout_s
+        if now - self._t0 > limit:
+            return self._fail(f"{axis} {kind}: still moving after {limit:.0f} s without "
+                              "reaching an end stop",
+                              f"raise cal_{axis}_timeout_s if the head is slower than expected")
 
         sign = -1 if kind == "low" else 1
         if now - self._last_change < cfg.cal_stall_s:
