@@ -624,6 +624,107 @@
       ]
     },
     {
+      "id": "calibrate",
+      "type": "form",
+      "title": "CALIBRATE TRAVEL",
+      "region": "sidebar",
+      "default": true,
+      "socket": "http",
+      "get": "/api/calibrate",
+      "put": "/api/calibrate",
+      "submit_label": "▶ RUN / CANCEL",
+      "fields": [
+        {
+          "key": "axes",
+          "label": "Axes (cancel stops a run)",
+          "kind": "select",
+          "options": [
+            "both",
+            "pan",
+            "tilt",
+            "cancel"
+          ]
+        },
+        {
+          "key": "apply",
+          "label": "Apply measured limits",
+          "kind": "toggle"
+        },
+        {
+          "key": "center",
+          "label": "Centre head when done",
+          "kind": "toggle"
+        }
+      ]
+    },
+    {
+      "id": "calibration-status",
+      "type": "telemetry",
+      "title": "CALIBRATION RESULT",
+      "region": "sidebar",
+      "default": true,
+      "socket": "http",
+      "get": "/api/calibrate",
+      "interval": 1000,
+      "rows": [
+        {
+          "label": "STATE",
+          "path": "state"
+        },
+        {
+          "label": "PHASE",
+          "path": "phase"
+        },
+        {
+          "label": "ERROR",
+          "path": "error"
+        },
+        {
+          "label": "HINT",
+          "path": "hint"
+        },
+        {
+          "label": "APPLIED",
+          "path": "applied"
+        },
+        {
+          "label": "PAN RANGE",
+          "path": "result.pan.range",
+          "fmt": "f1"
+        },
+        {
+          "label": "PAN CENTRE",
+          "path": "result.pan.center_heading",
+          "fmt": "f1"
+        },
+        {
+          "label": "PAN LEFT STOP",
+          "path": "result.pan.left_heading",
+          "fmt": "f1"
+        },
+        {
+          "label": "PAN RIGHT STOP",
+          "path": "result.pan.right_heading",
+          "fmt": "f1"
+        },
+        {
+          "label": "TILT MIN",
+          "path": "result.tilt.min",
+          "fmt": "f1"
+        },
+        {
+          "label": "TILT MAX",
+          "path": "result.tilt.max",
+          "fmt": "f1"
+        },
+        {
+          "label": "TILT RANGE",
+          "path": "result.tilt.range",
+          "fmt": "f1"
+        }
+      ]
+    },
+    {
       "id": "limits",
       "type": "form",
       "title": "TRAVEL LIMITS",

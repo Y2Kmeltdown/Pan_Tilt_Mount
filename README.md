@@ -219,6 +219,27 @@ Aim points inside the dead gap are clamped to the window edge, and the pan never
 that would cross the end stop. If `pan_center_heading` is wrong the head can still hit a stop - which the
 safety trip below catches.
 
+### Calibration widget (measures the travel for you)
+**CALIBRATE TRAVEL** (+ **CALIBRATION RESULT**) runs the head into its end stops and uses the compass to find
+where they are. Because the head has limit switches, an end stop just makes the compass stop changing:
+
+1. Per axis, drive to the low end (left / down) until the compass has been still for 2 s - that is the low stop.
+   (Starting on the stop is fine.)
+2. Drive to the high end while integrating the unwrapped compass travel until it stalls again.
+
+Results: **pan range**, the compass bearing of each pan stop and the **pan centre** (the bearing the head faces
+at mid-travel, i.e. the base's orientation - this is what `pan_center_heading` needs), and the **tilt min / max /
+range** as compass pitch. With *Apply* on (default) these become the live travel limits; with *Centre* on the head
+then drives to mid-travel using them. Axes: `pan`, `tilt`, `both`; `cancel` aborts a run (so does Stop).
+API: `PUT /api/calibrate {"axes", "apply", "center"}`, `GET /api/calibrate`. Results are also logged to
+supervisor (`[pantilt] calibration done: ...`) - copy them into the module arguments to keep them across a restart.
+
+It aborts with an explanation, rather than leaving the head running, when the compass goes stale, a phase times
+out, the pan turns more than a full circle (no limit switch), the head does not move at all (power / wiring /
+compass not updating), or the compass moves against the commanded direction - for tilt it tells you to set
+`pitch_sign` to -1. The head moves at its full speed to both extremes (~1-2 minutes for tilt), so clear the area
+and make sure cables have slack. Needs a connected head and a live compass.
+
 ### Safety
 * Starts **idle**; stops on stale compass, no observer, no track fix, or lost serial link; Stop is sent on exit.
 * If an axis is driven for 2.5 s without actually moving in the commanded direction (wrong `pitch_sign`,

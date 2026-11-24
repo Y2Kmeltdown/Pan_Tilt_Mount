@@ -225,6 +225,10 @@ class PanTiltService:
             self._send(pan, tilt, now)
             info["head_connected"] = self.head_ok
             info["head_error"] = self.head_error
+            if info.get("status") in ("calibration_done", "calibration_error"):
+                cal = self.pointer.calibration_status()     # log once, with the values to
+                print(f"[pantilt] calibration {cal['state']}: {cal['result']} "     # keep as args
+                      f"error={cal['error']} applied={cal['applied']}", flush=True)
             self.status = info
             await asyncio.sleep(period)
 
@@ -303,6 +307,39 @@ def build_app(svc: PanTiltService) -> web.Application:
         svc.stop_track_task()
         p.stop()
         return web.json_response({"status": "ok", "mode": "idle"})
+
+    # -- calibration: run the head into its end stops to measure travel
+    def calibration_view() -> Dict[str, Any]:
+        st = p.calibration_status()
+        opts = st.pop("options")
+        return {**opts, **st}
+
+    @r.get("/api/calibrate")
+    async def get_calibrate(_):
+        return web.json_response(calibration_view())
+
+    @r.put("/api/calibrate")
+    async def put_calibrate(req):
+        """{"axes": "pan"|"tilt"|"both"|"cancel", "apply": bool, "center": bool}"""
+        d = await body(req)
+        axes = str(d.get("axes", "both"))
+        if axes == "cancel":
+            svc.stop_track_task()
+            if p.mode == "calibrate":
+                p.stop()
+            return web.json_response(calibration_view())
+        if axes not in ("pan", "tilt", "both"):
+            return bad("axes must be pan, tilt, both or cancel")
+        if not svc.head_ok or svc.head is None:
+            return bad("head is not connected", 409)
+        if not svc.sources["compass"]["ok"] or p.head_attitude(time.time()) is None:
+            return bad("compass is not available - calibration needs it", 409)
+        svc.stop_track_task()
+        p.start_calibration(axes, bool(d.get("apply", True)), bool(d.get("center", True)),
+                            time.time())
+        print(f"[pantilt] calibration started: axes={axes} apply={d.get('apply', True)}",
+              flush=True)
+        return web.json_response(calibration_view())
 
     # -- modes
     @r.get("/api/mode/latlon")

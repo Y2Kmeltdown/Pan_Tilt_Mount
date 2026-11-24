@@ -18,10 +18,11 @@ import threading
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 
+from calibration import Calibrator
 from pointing import (DeadReckoner, Fix, Smoother, clamp, look_angles, pan_error,
                       wrap180, wrap360)
 
-MODES = ("idle", "jog", "angle", "latlon", "track")
+MODES = ("idle", "jog", "angle", "latlon", "track", "calibrate")
 
 
 # --------------------------------------------------------------------------- per-axis control
@@ -124,6 +125,10 @@ class PointerConfig:
     def tilt_hi(self) -> float:
         return self.tilt_max_deg - self.limit_margin_deg
 
+    # calibration (end-stop search)
+    cal_stall_s: float = 2.0           # compass still this long => end stop reached
+    cal_eps_deg: float = 0.6           # movement smaller than this counts as still
+    cal_settle_s: float = 0.6          # pause between phases
     # loop tuning
     pan_rate_dps: float = 14.0
     tilt_rate_dps: float = 2.0
@@ -175,6 +180,9 @@ class Pointer:
         self.pitch_nudge = 0.0
         # last computed values, for telemetry
         self.last: Dict[str, object] = {}
+        self.cal: Optional[Calibrator] = None
+        self.cal_opts: Dict[str, object] = {"axes": "both", "apply": True, "center": True}
+        self.cal_applied = False
 
     # ---- inputs ---------------------------------------------------------------
     def set_compass(self, yaw: float, pitch: float, roll: float, t: float) -> None:
@@ -231,12 +239,52 @@ class Pointer:
 
     # ---- mode commands --------------------------------------------------------
     def _enter(self, mode: str) -> None:
+        if (self.mode == "calibrate" and mode != "calibrate" and self.cal is not None
+                and self.cal.state == "running"):
+            self.cal.state, self.cal.error = "error", "cancelled"
         self.mode = mode
         self.pan_ctl.reset()
         self.tilt_ctl.reset()
 
     def stop(self) -> None:
         with self.lock:
+            self._enter("idle")
+
+    def start_calibration(self, axes: str, apply: bool, center: bool, now: float) -> None:
+        """Run the head into its end stops to measure travel. The head WILL move
+        to both ends of the chosen axes - the caller must make that safe."""
+        with self.lock:
+            cal = Calibrator(self.cfg, axes, now)
+            self.cal, self.cal_applied = cal, False
+            self.cal_opts = {"axes": axes, "apply": apply, "center": center}
+            self._enter("calibrate")
+
+    def calibration_status(self) -> Dict[str, object]:
+        with self.lock:
+            out: Dict[str, object] = {"options": dict(self.cal_opts), "applied": self.cal_applied}
+            out.update(self.cal.progress() if self.cal else
+                       {"state": "idle", "phase": None, "error": None, "hint": None, "result": {}})
+            return out
+
+    def _finish_calibration(self, now: float) -> None:
+        """Apply a completed calibration to the limits, then centre or go idle."""
+        cal, opts, cfg = self.cal, self.cal_opts, self.cfg
+        res = cal.result
+        if opts["apply"]:
+            kw: Dict[str, object] = {}
+            if "pan" in res:
+                kw.update(center=res["pan"]["center_heading"], pan_range=res["pan"]["range"])
+            if "tilt" in res:
+                kw.update(tilt_min=res["tilt"]["min"], tilt_max=res["tilt"]["max"])
+            try:
+                self.set_limits(**kw)
+                self.cal_applied = True
+            except ValueError as exc:
+                cal.state, cal.error = "error", f"measured limits rejected: {exc}"
+        if cal.state == "done" and opts["center"] and cfg.pan_center_heading is not None:
+            self.angle_cmd = (cfg.pan_center_heading, (cfg.tilt_lo + cfg.tilt_hi) / 2.0)
+            self._enter("angle")
+        else:
             self._enter("idle")
 
     def point_latlon(self, lat: float, lon: float, alt: float) -> None:
@@ -347,6 +395,25 @@ class Pointer:
                        (pan < 0 and rel <= -cfg.pan_half_range_deg):
                         pan = 0
             return done(pan, tilt, "jog")
+
+        # ---- calibration: open-loop drive into the end stops, judged by the compass ----
+        if self.mode == "calibrate":
+            cal = self.cal
+            if att is None or att[3] > cfg.compass_max_age_s:
+                cal.state, cal.error = "error", "compass stale/unavailable during calibration"
+                self._enter("idle")
+                return done(0, 0, "calibration_error")
+            pan, tilt = cal.step(now, att[0], att[1])
+            info["calibration"] = cal.progress()
+            if cal.state == "running":
+                return done(pan, tilt, f"calibrating:{cal.phase}")
+            if cal.state == "error":
+                self._enter("idle")
+                return done(0, 0, "calibration_error")
+            self._finish_calibration(now)          # done: apply limits, maybe centre
+            info["calibration"] = self.cal.progress()
+            return done(0, 0, "calibration_done" if self.cal.state == "done"
+                        else "calibration_error")
 
         # ---- closed-loop modes need a fresh compass reading ----
         if att is None:
